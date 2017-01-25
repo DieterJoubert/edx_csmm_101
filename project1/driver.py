@@ -1,5 +1,4 @@
-import sys, collections
-import os, time
+import sys, collections, time, math
 
 class State:
     def __init__(self, board, path, depth):
@@ -9,25 +8,29 @@ class State:
         self.depth = depth
 
     def __str__(self):
-        return "".join(map(str,self.board))
+        return str(self.board)
+        #return ",".join(map(str,self.board))
 
 class Solver:
-    def __init__(self):
-        self.solved_board = None
+    def __init__(self, selected_method, board_start):
+        #data
+        self.solved_board = sorted(board_start)
+        self.board_start = board_start
+        self.board_width = int(math.sqrt(max(board_start)+1))
         self.move_dict = self.create_move_dict()
-        self.board_width = 3
+        self.selected_method = selected_method
         self.methods = {'bfs': self.bfs, 'dfs': self.dfs, 'ast': self.ast, 'ida': self.ida}
 
-    def run(self, search_method, board_start):
-        self.solved_board = sorted(board_start)
+        #metadata
 
+    def run(self):
         start_time = time.time()
 
-        f = self.methods[search_method]
-        f(board_start)
+        f = self.methods[self.selected_method]
+        f(self.board_start)
 
-        end_time = time.time()
-        print "time_elapsed: " + str(end_time-start_time)
+        time_elapsed = time.time() - start_time
+        print "time_elapsed: " + str(time_elapsed)
 
     def get_children(self, state):
         """Get children of input state in UDLR order"""
@@ -49,13 +52,13 @@ class Solver:
 
     def create_move_dict(self):
         d = {}
-        for hole_index in range(9):
+        for hole_index in range(len(self.board_start)):
             moves = []
-            for (move_i, move_name) in [(-3+hole_index, "U"),(3+hole_index, "D")]:
-                if 0 <= move_i <= 8:
+            for (move_i, move_name) in [(-self.board_width+hole_index, "U"),(self.board_width+hole_index, "D")]:
+                if 0 <= move_i <= max(self.board_start):
                     moves.append( (move_i, move_name))
             for (move_i, move_name) in [(-1+hole_index, "L"),(1+hole_index, "R")]:
-                if hole_index // 3 == move_i // 3:
+                if hole_index // self.board_width == move_i // self.board_width:
                     moves.append( (move_i, move_name) )
             d[hole_index] = moves
         return d 
@@ -155,11 +158,11 @@ class Solver:
 
 def main():
     args = sys.argv
-    chosen_method = args[1]
+    selected_method = args[1]
     board_start = map(int,args[2].split(","))
 
-    sol = Solver()
-    sol.run(chosen_method, board_start)
+    sol = Solver(selected_method,  board_start)
+    sol.run()
 
 if __name__ == "__main__":
     main()
