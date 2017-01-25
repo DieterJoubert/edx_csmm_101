@@ -1,4 +1,4 @@
-import sys, collections, time, math
+import sys, collections, time, math, resource
 
 class State:
     def __init__(self, board, path, depth):
@@ -13,13 +13,14 @@ class State:
 
 class Solver:
     def __init__(self, selected_method, board_start):
+        self.selected_method = selected_method
+        self.methods = {'bfs': self.bfs, 'dfs': self.dfs, 'ast': self.ast, 'ida': self.ida}
+
         #data
         self.solved_board = sorted(board_start)
         self.board_start = board_start
         self.board_width = int(math.sqrt(max(board_start)+1))
         self.move_dict = self.create_move_dict()
-        self.selected_method = selected_method
-        self.methods = {'bfs': self.bfs, 'dfs': self.dfs, 'ast': self.ast, 'ida': self.ida}
 
         #metadata
 
@@ -119,7 +120,11 @@ class Solver:
         max_fringe_size = 0
         max_depth = 0
 
+        max_ram_usage = 0
+
         while stack:
+            max_ram_usage = max(max_ram_usage, resource.getrusage(resource.RUSAGE_SELF)[2])
+
             max_fringe_size = max(max_fringe_size, len(stack))
             #print nodes_expanded
             curr = stack.pop()
@@ -135,6 +140,7 @@ class Solver:
                 print "max_fringe_size: " + str(max_fringe_size)
                 print "search_depth: " + str(len(curr.path))
                 print "max_search_depth: " + str(max_depth)
+                print "max_ram_usage: " + str(max_ram_usage * 0.000001)
                 return
 
             else:
