@@ -1,89 +1,165 @@
 import sys, collections
+import os, time
 
-solved_board = [0,1,2,3,4,5,6,7,8]
+class State:
+    def __init__(self, board, path, depth):
+        self.board = board
+        self.path = path
+        self.hole_index = self.board.index(0)
+        self.depth = depth
 
-def solved(board):
-    """Check if the board is in solved state"""
-    return board == list(range(9))
+    def __str__(self):
+        return "".join(map(str,self.board))
 
-def possible_moves(board):
-    """Get the indices to where the hole can be moved with the name of the moves"""
-    hole_index = board.index(0)
-    moves = []
+class Solver:
+    def __init__(self):
+        self.solved_board = None
+        self.move_dict = self.create_move_dict()
+        self.board_width = 3
+        self.methods = {'bfs': self.bfs, 'dfs': self.dfs, 'ast': self.ast, 'ida': self.ida}
 
-    for (move_i, move_name) in [(-3+hole_index, "Up"),(3+hole_index, "Down")]:
-        if 0 <= move_i <= 8:
-            moves.append( (move_i, move_name))
+    def run(self, search_method, board_start):
+        self.solved_board = sorted(board_start)
 
-    for (move_i, move_name) in [(-1+hole_index, "Left"),(1+hole_index, "Right")]:
-        if hole_index // 3 == move_i // 3:
-            moves.append( (move_i, move_name) )
+        start_time = time.time()
 
-    return moves
+        f = self.methods[search_method]
+        f(board_start)
 
-def move(board, destination_index):
-    """Move the hole (0) to the destination index"""
-    board = list(board)
-    hole_index = board.index(0)
-    destination_value = board[destination_index]
-    board[destination_index] = 0
-    board[hole_index] = destination_value
-    hole_index = destination_index
-    return board
+        end_time = time.time()
+        print "time_elapsed: " + str(end_time-start_time)
 
-def bfs(board):
-    global solved_board
+    def get_children(self, state):
+        """Get children of input state in UDLR order"""
+        children = []
+        for (destination_i, move_name) in self.move_dict[state.hole_index]:
+            child_board = self.move_result(state.board, state.hole_index, destination_i)
+            child = State(child_board, state.path + move_name, state.depth+1)
+            children.append(child)
+        return children
 
-    q = collections.deque()
-    q.append((board, []))
-    visited = set()
-    queued_up = set()
-    queued_up.add(tuple(board))
+    def move_result(self, board, hole_index, destination_index):
+        """Get the result of moving the hole (0) to the destination index
+        Returns a list representing the new board"""
+        board = list(board)
+        destination_value = board[destination_index]
+        board[destination_index] = 0
+        board[hole_index] = destination_value
+        return board
 
-    nodes_expanded = 0
+    def create_move_dict(self):
+        d = {}
+        for hole_index in range(9):
+            moves = []
+            for (move_i, move_name) in [(-3+hole_index, "U"),(3+hole_index, "D")]:
+                if 0 <= move_i <= 8:
+                    moves.append( (move_i, move_name))
+            for (move_i, move_name) in [(-1+hole_index, "L"),(1+hole_index, "R")]:
+                if hole_index // 3 == move_i // 3:
+                    moves.append( (move_i, move_name) )
+            d[hole_index] = moves
+        return d 
 
-    while len(q):
-        print "ITE"
-        curr_board, curr_path = q.popleft()
+    def bfs(self, board):
+        root = State(board,"",0)
+        queue = collections.deque()
+        queue.append(root)
 
-        queued_up.remove(tuple(curr_board))
+        visited = set()
+        in_queue = set()
 
-        if curr_board == solved_board:
-            print "-------SOLVED--------"
-            print curr_path
-            print "nodes expanded: " + str(nodes_expanded)
-            return
+        in_queue.add( str(root) )
+
+        nodes_expanded = 0
+        max_fringe_size = 0
+        max_depth = 0
+
+        while len(queue):
+            max_fringe_size = max(max_fringe_size, len(queue))
+            #print nodes_expanded
+            curr = queue.popleft()
+
+            in_queue.remove( str(curr) )
+
+            if curr.board == self.solved_board:
+                print "-------SOLVED WITH BREADTH--------"
+                print "path_to_goal:" + str(curr.path)
+                print "cost_of_path: " + str(len(curr.path))
+                print "nodes_expanded: " + str(nodes_expanded)
+                print "fringe_size: " + str(len(queue))
+                print "max_fringe_size: " + str(max_fringe_size)
+                print "search_depth: " + str(len(curr.path))
+                print "max_search_depth: " + str(max_depth)
+                return
+
+            else:
+                visited.add( str(curr) )
+                nodes_expanded += 1
+
+                for child in self.get_children(curr):
+                    child_str = str(child)
+                    if child_str not in in_queue and child_str not in visited:
+                        max_depth = max(max_depth, child.depth)
+                        queue.append(child)
+                        in_queue.add(child_str)
+
+    def dfs(self,board):
+        root = State(board,"",0)
+        stack = [root]
+
+        visited = set()
+        on_stack = set()
+
+        on_stack.add( str(root) )
+
+        nodes_expanded = 0
+        max_fringe_size = 0
+        max_depth = 0
+
+        while stack:
+            max_fringe_size = max(max_fringe_size, len(stack))
+            #print nodes_expanded
+            curr = stack.pop()
+
+            on_stack.remove( str(curr) )
+
+            if curr.board == self.solved_board:
+                print "-------SOLVED WITH DEPTH--------"
+                print "path_to_goal:" + str(curr.path)
+                print "cost_of_path: " + str(len(curr.path))
+                print "nodes_expanded: " + str(nodes_expanded)
+                print "fringe_size: " + str(len(stack))
+                print "max_fringe_size: " + str(max_fringe_size)
+                print "search_depth: " + str(len(curr.path))
+                print "max_search_depth: " + str(max_depth)
+                return
+
+            else:
+                visited.add( str(curr) )
+                nodes_expanded += 1
+
+                for child in self.get_children(curr)[::-1]:
+                    child_str = str(child)
+                    if child_str not in on_stack and child_str not in visited:
+                        max_depth = max(max_depth, child.depth)
+                        stack.append(child)
+                        on_stack.add(child_str)
 
 
-        else:
-            visited.add(tuple(curr_board))
-            nodes_expanded += 1
+    def ast(self):
+        pass
 
-            for (move_i, move_name) in possible_moves(curr_board):
-                new_board = move(curr_board, move_i)
-                new_t = tuple(new_board)
-                if new_t not in queued_up and new_t not in visited:
-                    q.append( (new_board, curr_path + [move_name]))
-                    queued_up.add(tuple(new_board))
+    def ida(self):
+        pass
 
-def dfs(board):
-    pass
-
-def ast(board):
-    pass
-
-def ida(board):
-    pass
 
 def main():
     args = sys.argv
     chosen_method = args[1]
-    starter_board = map(int,args[2].split(","))
+    board_start = map(int,args[2].split(","))
 
-    methods = {'bfs': bfs, 'dfs': dfs, 'ast': ast, 'ida': ida}
-
-    f = methods[chosen_method]
-    f(starter_board)    
+    sol = Solver()
+    sol.run(chosen_method, board_start)
 
 if __name__ == "__main__":
     main()
