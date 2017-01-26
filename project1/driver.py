@@ -1,11 +1,11 @@
 import sys, collections, time, math, resource
 
 class State:
-    def __init__(self, board, path, depth):
+    def __init__(self, board, depth, parent=None):
         self.board = board
-        self.path = path
         self.hole_index = self.board.index(0)
         self.depth = depth
+        self.parent = parent
 
     def __str__(self):
         return str(self.board)
@@ -16,29 +16,47 @@ class Solver:
         self.selected_method = selected_method
         self.methods = {'bfs': self.bfs, 'dfs': self.dfs, 'ast': self.ast, 'ida': self.ida}
 
-        #data
+        #initial data
         self.solved_board = sorted(board_start)
         self.board_start = board_start
         self.board_width = int(math.sqrt(max(board_start)+1))
         self.move_dict = self.create_move_dict()
 
-        #metadata
+        #running data
+        self.visited = set()
+        self.frontier = set()
+
+        #overview metadata
+        self.nodes_expanded = 0
+        self.max_fringe_size = 0
+        self.max_search_depth = 0
+        self.max_ram_usage = 0
+
+        #solution metadata
+        self.path = []
+        self.cost_of_path = None
+        self.fringe_size = None
+        self.search_depth = None
 
     def run(self):
         start_time = time.time()
 
         f = self.methods[self.selected_method]
-        f(self.board_start)
+        result = f(self.board_start)
 
-        time_elapsed = time.time() - start_time
-        print "time_elapsed: " + str(time_elapsed)
+        running_time = time.time() - start_time
+        result = [self.path, self.cost_of_path, self.nodes_expanded, self.fringe_size, self.max_fringe_size, 
+                    self.search_depth, self.max_search_depth, running_time, self.max_ram_usage]
+        for item in result:
+            print item
+        return result
 
     def get_children(self, state):
         """Get children of input state in UDLR order"""
         children = []
         for (destination_i, move_name) in self.move_dict[state.hole_index]:
             child_board = self.move_result(state.board, state.hole_index, destination_i)
-            child = State(child_board, state.path + move_name, state.depth+1)
+            child = State(child_board, state.depth+1, state)
             children.append(child)
         return children
 
@@ -64,96 +82,82 @@ class Solver:
             d[hole_index] = moves
         return d 
 
+    def get_path(self, curr_state):
+        """Backtrack from the solution State to find the path"""
+        path = []
+        move_name = {self.board_width: 'Up', -self.board_width: 'Down', 1: 'Left', -1: 'Right'}
+
+        while curr_state.parent:
+            diff = curr_state.parent.hole_index - curr_state.hole_index
+            path = [move_name[diff]] + path
+            curr_state = curr_state.parent
+        return path
+
     def bfs(self, board):
-        root = State(board,"",0)
+        root = State(board,0)
         queue = collections.deque()
         queue.append(root)
 
-        visited = set()
-        in_queue = set()
-
-        in_queue.add( str(root) )
-
-        nodes_expanded = 0
-        max_fringe_size = 0
-        max_depth = 0
+        self.frontier.add( str(root) )
 
         while len(queue):
-            max_fringe_size = max(max_fringe_size, len(queue))
-            #print nodes_expanded
+            self.max_ram_usage = max(self.max_ram_usage, resource.getrusage(resource.RUSAGE_SELF)[2] * 0.000001)
+            self.max_fringe_size = max(self.max_fringe_size, len(queue))
+
             curr = queue.popleft()
 
-            in_queue.remove( str(curr) )
+            self.frontier.remove( str(curr) )
 
             if curr.board == self.solved_board:
-                print "-------SOLVED WITH BREADTH--------"
-                print "path_to_goal:" + str(curr.path)
-                print "cost_of_path: " + str(len(curr.path))
-                print "nodes_expanded: " + str(nodes_expanded)
-                print "fringe_size: " + str(len(queue))
-                print "max_fringe_size: " + str(max_fringe_size)
-                print "search_depth: " + str(len(curr.path))
-                print "max_search_depth: " + str(max_depth)
+                self.path = self.get_path(curr)
+                self.cost_of_path = len(self.path)
+                self.fringe_size = len(queue)
+                self.search_depth = curr.depth
                 return
 
             else:
-                visited.add( str(curr) )
-                nodes_expanded += 1
+                self.visited.add( str(curr) )
+                self.nodes_expanded += 1
 
                 for child in self.get_children(curr):
                     child_str = str(child)
-                    if child_str not in in_queue and child_str not in visited:
-                        max_depth = max(max_depth, child.depth)
+                    if child_str not in self.frontier and child_str not in self.visited:
                         queue.append(child)
-                        in_queue.add(child_str)
+                        self.frontier.add(child_str)
+
+                        self.max_search_depth = max(self.max_search_depth, child.depth)
 
     def dfs(self,board):
-        root = State(board,"",0)
+        root = State(board,0)
         stack = [root]
 
-        visited = set()
-        on_stack = set()
-
-        on_stack.add( str(root) )
-
-        nodes_expanded = 0
-        max_fringe_size = 0
-        max_depth = 0
-
-        max_ram_usage = 0
+        self.frontier.add( str(root) )
 
         while stack:
-            max_ram_usage = max(max_ram_usage, resource.getrusage(resource.RUSAGE_SELF)[2])
+            self.max_ram_usage = max(self.max_ram_usage, resource.getrusage(resource.RUSAGE_SELF)[2] * 0.000001)
+            self.max_fringe_size = max(self.max_fringe_size, len(stack))
 
-            max_fringe_size = max(max_fringe_size, len(stack))
-            #print nodes_expanded
             curr = stack.pop()
-
-            on_stack.remove( str(curr) )
+            self.frontier.remove( str(curr) )
 
             if curr.board == self.solved_board:
-                print "-------SOLVED WITH DEPTH--------"
-                print "path_to_goal:" + str(curr.path)
-                print "cost_of_path: " + str(len(curr.path))
-                print "nodes_expanded: " + str(nodes_expanded)
-                print "fringe_size: " + str(len(stack))
-                print "max_fringe_size: " + str(max_fringe_size)
-                print "search_depth: " + str(len(curr.path))
-                print "max_search_depth: " + str(max_depth)
-                print "max_ram_usage: " + str(max_ram_usage * 0.000001)
+                self.path = self.get_path(curr)
+                self.cost_of_path = len(self.path)
+                self.fringe_size = len(stack)
+                self.search_depth = curr.depth
                 return
 
             else:
-                visited.add( str(curr) )
-                nodes_expanded += 1
+                self.visited.add( str(curr) )
+                self.nodes_expanded += 1
 
                 for child in self.get_children(curr)[::-1]:
                     child_str = str(child)
-                    if child_str not in on_stack and child_str not in visited:
-                        max_depth = max(max_depth, child.depth)
+                    if child_str not in self.frontier and child_str not in self.visited:
                         stack.append(child)
-                        on_stack.add(child_str)
+                        self.frontier.add(child_str)
 
+                        self.max_search_depth = max(self.max_search_depth, child.depth)
 
     def ast(self):
         pass
@@ -161,14 +165,22 @@ class Solver:
     def ida(self):
         pass
 
-
 def main():
     args = sys.argv
     selected_method = args[1]
     board_start = map(int,args[2].split(","))
 
     sol = Solver(selected_method,  board_start)
-    sol.run()
+    result = sol.run()
+
+    out = open("output.txt","w")
+    fields = ['path_to_goal', 'cost_of_path', 'nodes_expanded', 
+              'fringe_size', 'max_fringe_size', 'search_depth', 
+              'max_search_depth', 'running_time', 'max_ram_usage']
+
+    for line in map(lambda x: str(x[0]) + ": " + str(x[1]), zip(fields, result)):
+        out.write(line + "\n")
+    out.close()
 
 if __name__ == "__main__":
     main()
