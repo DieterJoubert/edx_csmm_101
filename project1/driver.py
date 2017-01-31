@@ -1,4 +1,4 @@
-import sys, collections, time, math, resource
+import sys, collections, time, math, resource, Queue
 
 class State:
     def __init__(self, board, depth, parent=None):
@@ -9,7 +9,6 @@ class State:
 
     def __str__(self):
         return str(self.board)
-        #return ",".join(map(str,self.board))
 
 class Solver:
     def __init__(self, selected_method, board_start):
@@ -83,15 +82,29 @@ class Solver:
         return d 
 
     def get_path(self, curr_state):
-        """Backtrack from the solution State to find the path"""
+        """Backtrack from the solution State to the root, in order to find the path"""
         path = []
-        move_name = {self.board_width: 'Up', -self.board_width: 'Down', 1: 'Left', -1: 'Right'}
+        move_name = {-self.board_width: 'Up', self.board_width: 'Down', -1: 'Left', 1: 'Right'}
 
         while curr_state.parent:
-            diff = curr_state.parent.hole_index - curr_state.hole_index
+            diff = curr_state.hole_index - curr_state.parent.hole_index 
             path = [move_name[diff]] + path
             curr_state = curr_state.parent
         return path
+
+    def manhattan_score(self, state):
+        score = 0
+
+        for i in range(len(state.board)):
+            tile = state.board[i]
+            dist = abs(tile-i)
+
+            v_moves = int(dist / self.board_width)
+            h_moves = dist % self.board_width
+
+            score += v_moves + h_moves
+
+        return score
 
     def bfs(self, board):
         root = State(board,0)
@@ -159,8 +172,39 @@ class Solver:
 
                         self.max_search_depth = max(self.max_search_depth, child.depth)
 
-    def ast(self):
-        pass
+    def ast(self, board):
+        root = State(board,0)
+        q = Queue.PriorityQueue()
+        q.put( (self.manhattan_score(root), root) )
+
+        self.frontier.add( str(root) )
+
+        while q.qsize() > 0:
+            self.max_ram_usage = max(self.max_ram_usage, resource.getrusage(resource.RUSAGE_SELF)[2] * 0.000001)
+            self.max_fringe_size = max(self.max_fringe_size, q.qsize())
+
+            curr = q.get()[1]
+
+            self.frontier.remove( str(curr) )
+
+            if curr.board == self.solved_board:
+                self.path = self.get_path(curr)
+                self.cost_of_path = len(self.path)
+                self.fringe_size = q.qsize()
+                self.search_depth = curr.depth
+                return
+
+            else:
+                self.visited.add( str(curr) )
+                self.nodes_expanded += 1
+
+                for child in self.get_children(curr):
+                    child_str = str(child)
+                    if child_str not in self.frontier and child_str not in self.visited:
+                        q.put( (child.depth + self.manhattan_score(child), child) )
+                        self.frontier.add(child_str)
+
+                        self.max_search_depth = max(self.max_search_depth, child.depth)
 
     def ida(self):
         pass
