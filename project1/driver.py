@@ -173,6 +173,7 @@ class Solver:
                         self.max_search_depth = max(self.max_search_depth, child.depth)
 
     def ast(self, board):
+        """A-star search"""
         root = State(board,0)
         q = Queue.PriorityQueue()
         q.put( (self.manhattan_score(root), root) )
@@ -206,8 +207,64 @@ class Solver:
 
                         self.max_search_depth = max(self.max_search_depth, child.depth)
 
-    def ida(self):
-        pass
+    def ida(self, board):
+        """Iterative deepning A-star search"""
+        limit = self.manhattan_score(State(board,0))
+
+        while True:
+            result = self.cost_limited_search(board, limit)
+
+            if result == "SOLVED":
+                return
+            else:
+                limit = result
+
+    def cost_limited_search(self, board, limit):
+        """A modified version of the depth-limited search that uses the 
+        Manhattan heuristic along with node-depth (i.e. node cost) as a limit.
+        """
+        self.visited = set()
+        self.frontier = set()
+
+        root = State(board,0)
+        stack = [root]
+        min_f_violation = float('inf')
+
+        self.frontier.add( str(root) )
+
+        while stack:
+            self.max_ram_usage = max(self.max_ram_usage, resource.getrusage(resource.RUSAGE_SELF)[2] * 0.000001)
+            self.max_fringe_size = max(self.max_fringe_size, len(stack))
+
+            curr = stack.pop()
+            self.frontier.remove( str(curr) )
+
+            if curr.board == self.solved_board:
+                self.path = self.get_path(curr)
+                self.cost_of_path = len(self.path)
+                self.fringe_size = len(stack)
+                self.search_depth = curr.depth
+                return "SOLVED"
+
+            else:
+                self.visited.add( str(curr) )
+                self.nodes_expanded += 1
+
+                for child in self.get_children(curr)[::-1]:
+                    child_str = str(child)
+                    if child_str not in self.frontier and child_str not in self.visited:
+                        child_f_cost = child.depth + self.manhattan_score(child)
+
+                        if child_f_cost > limit:
+                            min_f_violation = min(min_f_violation, child_f_cost)
+                        else:
+                            stack.append(child)
+                            self.frontier.add(child_str)
+
+                        self.max_search_depth = max(self.max_search_depth, child.depth)
+
+        #return smallest f-cost that exceeded the limit (f-cost = g + h)
+        return min_f_violation
 
 def main():
     args = sys.argv
